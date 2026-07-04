@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shelf Life — Stock Expiry Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1C2127;
+    --ink-soft:#262C35;
+    --paper:#F7F3EA;
+    --paper-dim:#ECE6D6;
+    --red:#C8443C;
+    --amber:#D9A441;
+    --green:#3F6F52;
+    --slate:#8A8F98;
+    --line: rgba(247,243,234,0.12);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--ink);
+    color:var(--paper);
+    font-family:'IBM Plex Mono', monospace;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:'Oswald', sans-serif;
+    text-transform:uppercase;
+    letter-spacing:0.04em;
+  }
+  button{font-family:inherit; cursor:pointer;}
+  input{font-family:inherit;}
+
+  /* ---------- Texture ---------- */
+  .grain{
+    position:fixed; inset:0; pointer-events:none; opacity:0.05; z-index:1;
+    background-image: radial-gradient(circle at 20% 30%, #fff 0.5px, transparent 0.5px),
+                       radial-gradient(circle at 70% 80%, #fff 0.5px, transparent 0.5px);
+    background-size: 3px 3px, 4px 4px;
+  }
+
+  /* ---------- Layout shells ---------- */
+  .screen{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; position:relative; z-index:2;}
+  .hidden{display:none !important;}
+
+  /* ---------- AUTH SCREEN ---------- */
+  .auth-wrap{
+    width:100%; max-width:420px;
+  }
+  .badge-header{
+    text-align:center; margin-bottom:28px;
+  }
+  .badge-header .tag{
+    display:inline-block;
+    font-size:11px; letter-spacing:0.25em; color:var(--amber);
+    border:1px solid var(--amber); padding:4px 10px; border-radius:2px;
+    margin-bottom:14px;
+  }
+  .badge-header h1{ font-size:34px; line-height:1; color:var(--paper);}
+  .badge-header p{ color:var(--slate); font-size:12.5px; margin-top:8px; letter-spacing:0.03em;}
+
+  .clipboard{
+    background:var(--paper);
+    color:var(--ink);
+    border-radius:3px;
+    padding:32px 28px 28px;
+    position:relative;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
+  }
+  .clipboard::before{
+    content:"";
+    position:absolute; top:-12px; left:50%; transform:translateX(-50%);
+    width:84px; height:22px; background:#3A3F47; border-radius:6px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.3);
+  }
+  .clipboard::after{
+    content:"";
+    position:absolute; top:-7px; left:50%; transform:translateX(-50%);
+    width:30px; height:30px; border-radius:50%; background:#1C2127;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.6);
+  }
+
+  .tab-row{
+    display:flex; border-bottom:2px solid var(--ink); margin-bottom:22px; gap:0;
+  }
+  .tab-btn{
+    flex:1; background:none; border:none; padding:10px 0 12px;
+    font-family:'Oswald',sans-serif; font-size:14px; letter-spacing:0.08em;
+    color:var(--slate); text-transform:uppercase; position:relative;
+    border-bottom:3px solid transparent; margin-bottom:-2px;
+    transition: color 0.15s;
+  }
+  .tab-btn.active{ color:var(--ink); border-bottom-color:var(--red);}
+
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:block; font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--slate); margin-bottom:6px; font-weight:600;
+  }
+  .field input{
+    width:100%; border:none; border-bottom:1.5px solid #C9C2AE;
+    background:transparent; padding:8px 2px; font-size:15px; color:var(--ink);
+    outline:none; transition:border-color 0.15s;
+  }
+  .field input:focus{ border-color:var(--ink); }
+
+  .submit-btn{
+    width:100%; background:var(--ink); color:var(--paper); border:none;
+    padding:13px 0; font-family:'Oswald',sans-serif; font-size:14px;
+    letter-spacing:0.12em; text-transform:uppercase; border-radius:2px;
+    margin-top:6px; transition: background 0.15s, transform 0.1s;
+  }
+  .submit-btn:hover{ background:#000; }
+  .submit-btn:active{ transform:scale(0.98); }
+
+  .auth-error{
+    background: rgba(200,68,60,0.1); border:1px solid var(--red); color:var(--red);
+    font-size:12.5px; padding:9px 12px; border-radius:2px; margin-bottom:14px;
+    display:none;
+  }
+  .auth-error.show{display:block;}
+  .auth-note{
+    text-align:center; font-size:11.5px; color:var(--slate); margin-top:18px; letter-spacing:0.02em;
+  }
+  .stamp-corner{
+    position:absolute; bottom:14px; right:18px; font-family:'Oswald',sans-serif;
+    font-size:10px; letter-spacing:0.15em; color:#C9C2AE; transform:rotate(-3deg);
+  }
+
+  /* ---------- APP SHELL ---------- */
+  .app{ display:none; min-height:100vh; position:relative; z-index:2; }
+  .app.show{ display:block; }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px; border-bottom:1px solid var(--line);
+    background:var(--ink-soft);
+    position:sticky; top:0; z-index:10;
+    flex-wrap:wrap; gap:12px;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand .mark{
+    width:30px; height:30px; border:2px solid var(--amber); border-radius:4px;
+    display:flex; align-items:center; justify-content:center; transform:rotate(-4deg);
+    font-family:'Oswald',sans-serif; font-weight:700; font-size:13px; color:var(--amber);
+  }
+  .brand h2{ font-size:18px; color:var(--paper); }
+  .topbar-right{ display:flex; align-items:center; gap:14px; }
+  .user-pill{
+    font-size:12px; color:var(--slate); letter-spacing:0.02em;
+  }
+  .user-pill strong{ color:var(--paper); }
+  .logout-btn{
+    background:none; border:1px solid var(--line); color:var(--paper);
+    padding:7px 14px; border-radius:2px; font-size:11.5px; letter-spacing:0.08em;
+    text-transform:uppercase; font-family:'Oswald',sans-serif; transition: border-color 0.15s, color 0.15s;
+  }
+  .logout-btn:hover{ border-color:var(--red); color:var(--red); }
+
+  .container{ max-width:1180px; margin:0 auto; padding:32px 28px 80px; }
+
+  /* Stat strip */
+  .stat-strip{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); margin-bottom:32px;
+    border-radius:3px; overflow:hidden;
+  }
+  .stat-cell{ background:var(--ink-soft); padding:18px 20px; }
+  .stat-cell .num{ font-family:'Oswald',sans-serif; font-size:30px; line-height:1; }
+  .stat-cell .lbl{ font-size:10.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--slate); margin-top:6px; }
+  .stat-cell.expired .num{ color:var(--red); }
+  .stat-cell.soon .num{ color:var(--amber); }
+  .stat-cell.fresh .num{ color:var(--green); }
+  .stat-cell.total .num{ color:var(--paper); }
+
+  /* Add product panel */
+  .panel{
+    background:var(--ink-soft); border:1px solid var(--line); border-radius:4px;
+    padding:24px 26px; margin-bottom:32px;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;
+    cursor:pointer;
+  }
+  .panel-head h3{ font-size:16px; color:var(--paper); display:flex; align-items:center; gap:10px;}
+  .panel-head .chev{ color:var(--slate); transition:transform 0.2s; font-size:13px;}
+  .panel-head .chev.open{ transform:rotate(180deg); }
+  .panel-body{ display:none; }
+  .panel-body.open{ display:block; }
+
+  .form-grid{
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:16px; margin-bottom:18px;
+  }
+  .form-grid .field{ margin-bottom:0; }
+  .form-grid label{ font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;}
+  .form-grid input, .form-grid select{
+    width:100%; background:var(--ink); border:1px solid var(--line); border-radius:2px;
+    color:var(--paper); padding:9px 10px; font-size:13.5px; outline:none;
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .form-grid input:focus, .form-grid select:focus{ border-color:var(--amber); }
+  .form-grid input[type="date"]{ color-scheme:dark; }
+
+  .add-btn{
+    background:var(--amber); color:var(--ink); border:none; padding:11px 22px;
+    font-family:'Oswald',sans-serif; letter-spacing:0.08em; text-transform:uppercase;
+    font-size:13px; border-radius:2px; transition:filter 0.15s;
+  }
+  .add-btn:hover{ filter:brightness(1.1); }
+
+  /* Filter row */
+  .filter-row{
+    display:flex; gap:10px; margin-bottom:18px; flex-wrap:wrap; align-items:center;
+  }
+  .filter-btn{
+    background:none; border:1px solid var(--line); color:var(--slate);
+    padding:7px 14px; border-radius:20px; font-size:11.5px; letter-spacing:0.05em;
+    font-family:'IBM Plex Mono',monospace; transition: all 0.15s;
+  }
+  .filter-btn.active{ background:var(--paper); color:var(--ink); border-color:var(--paper); }
+  .search-box{
+    margin-left:auto; background:var(--ink-soft); border:1px solid var(--line);
+    border-radius:20px; padding:7px 16px; font-size:12.5px; color:var(--paper);
+    min-width:200px; outline:none; font-family:'IBM Plex Mono',monospace;
+  }
+
+  /* Product grid */
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:16px;
+  }
+  .card{
+    background:var(--paper); color:var(--ink); border-radius:3px; padding:18px 18px 16px;
+    position:relative; overflow:hidden;
+    box-shadow:0 10px 24px -12px rgba(0,0,0,0.4);
+  }
+  .card::before{ /* left edge color bar */
+    content:""; position:absolute; left:0; top:0; bottom:0; width:5px;
+  }
+  .card.fresh::before{ background:var(--green); }
+  .card.soon::before{ background:var(--amber); }
+  .card.expired::before{ background:var(--red); }
+
+  .card-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:10px;}
+  .card-name{ font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:0.01em; line-height:1.2; padding-left:4px;}
+  .card-batch{ font-size:10.5px; color:#8A8478; letter-spacing:0.05em; padding-left:4px; margin-top:3px;}
+  .del-btn{
+    background:none; border:none; color:#B5AE9C; font-size:16px; line-height:1;
+    padding:2px 4px; border-radius:3px; transition:color 0.15s, background 0.15s;
+  }
+  .del-btn:hover{ color:var(--red); background:rgba(200,68,60,0.08); }
+
+  .stamp{
+    font-family:'Oswald',sans-serif; font-size:11px; letter-spacing:0.14em;
+    padding:4px 10px; border-radius:2px; display:inline-block; transform:rotate(-2deg);
+    border:1.5px solid currentColor; margin:6px 0 10px 4px;
+  }
+  .stamp.fresh{ color:var(--green); }
+  .stamp.soon{ color:#A57418; }
+  .stamp.expired{ color:var(--red); }
+
+  .date-rows{ padding-left:4px; font-size:12px; }
+  .date-rows .row{ display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed #D8D2C0; }
+  .date-rows .row:last-child{ border-bottom:none; }
+  .date-rows .row span:first-child{ color:#8A8478; letter-spacing:0.05em; font-size:10.5px; text-transform:uppercase;}
+  .date-rows .row span:last-child{ font-weight:600; }
+
+  .countdown{
+    margin-top:12px; padding-left:4px; font-size:12.5px; font-weight:600;
+  }
+  .countdown.fresh{ color:var(--green); }
+  .countdown.soon{ color:#A57418; }
+  .countdown.expired{ color:var(--red); }
+
+  .empty-state{
+    grid-column:1 / -1; text-align:center; padding:60px 20px; color:var(--slate);
+  }
+  .empty-state .icon{ font-size:38px; margin-bottom:14px; opacity:0.5; }
+  .empty-state p{ font-size:13px; }
+
+  /* Notification ticker / banner */
+  .alert-banner{
+    background: linear-gradient(90deg, rgba(200,68,60,0.16), rgba(200,68,60,0.04));
+    border:1px solid rgba(200,68,60,0.4); border-radius:4px; padding:14px 20px;
+    display:flex; align-items:center; gap:12px; margin-bottom:24px; font-size:13px;
+    color:#F0B5B0;
+  }
+  .alert-banner.amber-tone{
+    background: linear-gradient(90deg, rgba(217,164,65,0.16), rgba(217,164,65,0.04));
+    border-color: rgba(217,164,65,0.4); color:#F0D9A8;
+  }
+  .alert-banner .ic{ font-size:18px; }
+  .alert-banner.hidden-banner{ display:none; }
+
+  /* Reminder settings panel */
+  .reminder-settings{
+    display:flex; flex-wrap:wrap; gap:18px; align-items:flex-end; margin-top:4px;
+  }
+  .reminder-settings .field-sm label{
+    font-size:10.5px; letter-spacing:0.1em; text-transform:uppercase; color:var(--slate); display:block; margin-bottom:6px;
+  }
+  .reminder-settings .field-sm input{
+    width:90px; background:var(--ink); border:1px solid var(--line); border-radius:2px;
+    color:var(--paper); padding:8px 10px; font-size:13.5px; outline:none;
+  }
+  .save-pref-btn{
+    background:none; border:1px solid var(--green); color:var(--green); padding:9px 16px;
+    border-radius:2px; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+    font-family:'Oswald',sans-serif;
+  }
+  .save-pref-btn:hover{ background:rgba(63,111,82,0.12); }
+
+  .toast{
+    position:fixed; bottom:24px; right:24px; background:var(--ink); color:var(--paper);
+    border:1px solid var(--green); padding:13px 20px; border-radius:3px; font-size:12.5px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.4); z-index:100; transform:translateY(20px); opacity:0;
+    transition: all 0.25s; pointer-events:none;
+  }
+  .toast.show{ transform:translateY(0); opacity:1; }
+
+  @media (max-width:560px){
+    .stat-strip{ grid-template-columns:repeat(2,1fr); }
+    .search-box{ margin-left:0; width:100%; }
+    .filter-row{ flex-direction:column; align-items:stretch; }
+  }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<!-- ============ AUTH SCREEN ============ -->
+<div class="screen" id="authScreen">
+  <div class="auth-wrap">
+    <div class="badge-header">
+      <span class="tag">Inventory Control</span>
+      <h1>Shelf&nbsp;Life</h1>
+      <p>Track expiry. Clear stock on time. Stop the losses.</p>
+    </div>
+
+    <div class="clipboard">
+      <div class="tab-row">
+        <button class="tab-btn active" id="tabLogin" onclick="switchTab('login')">Sign In</button>
+        <button class="tab-btn" id="tabRegister" onclick="switchTab('register')">Register</button>
+      </div>
+
+      <div class="auth-error" id="authError"></div>
+
+      <!-- LOGIN FORM -->
+      <form id="loginForm" onsubmit="return handleLogin(event)">
+        <div class="field">
+          <label for="loginUser">Username</label>
+          <input type="text" id="loginUser" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="loginPass">Password</label>
+          <input type="password" id="loginPass" autocomplete="current-password" required>
+        </div>
+        <button type="submit" class="submit-btn">Sign In</button>
+        <p class="auth-note">No account yet? Use the Register tab above.</p>
+      </form>
+
+      <!-- REGISTER FORM -->
+      <form id="registerForm" class="hidden" onsubmit="return handleRegister(event)">
+        <div class="field">
+          <label for="regUser">Choose a username</label>
+          <input type="text" id="regUser" autocomplete="username" minlength="3" required>
+        </div>
+        <div class="field">
+          <label for="regPass">Choose a password</label>
+          <input type="password" id="regPass" autocomplete="new-password" minlength="4" required>
+        </div>
+        <div class="field">
+          <label for="regPass2">Confirm password</label>
+          <input type="password" id="regPass2" autocomplete="new-password" minlength="4" required>
+        </div>
+        <button type="submit" class="submit-btn">Create Account</button>
+        <p class="auth-note">Already registered? Use the Sign In tab above.</p>
+      </form>
+
+      <div class="stamp-corner">FORM 04-A</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<div class="app" id="appShell">
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark">SL</div>
+      <h2>Shelf Life</h2>
+    </div>
+    <div class="topbar-right">
+      <span class="user-pill">Signed in as <strong id="currentUserLabel"></strong></span>
+      <button class="logout-btn" onclick="handleLogout()">Log Out</button>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <div class="alert-banner hidden-banner" id="expiredBanner">
+      <span class="ic">⛔</span>
+      <span id="expiredBannerText"></span>
+    </div>
+    <div class="alert-banner amber-tone hidden-banner" id="soonBanner">
+      <span class="ic">⏰</span>
+      <span id="soonBannerText"></span>
+    </div>
+
+    <div class="stat-strip">
+      <div class="stat-cell total"><div class="num" id="statTotal">0</div><div class="lbl">Total Items</div></div>
+      <div class="stat-cell fresh"><div class="num" id="statFresh">0</div><div class="lbl">Fresh</div></div>
+      <div class="stat-cell soon"><div class="num" id="statSoon">0</div><div class="lbl">Clear Soon</div></div>
+      <div class="stat-cell expired"><div class="num" id="statExpired">0</div><div class="lbl">Expired</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head" onclick="togglePanel('addPanel')">
+        <h3>+ Add Product to Stock</h3>
+        <span class="chev open" id="addPanelChev">▾</span>
+      </div>
+      <div class="panel-body open" id="addPanelBody">
+        <form id="productForm" onsubmit="return handleAddProduct(event)">
+          <div class="form-grid">
+            <div class="field">
+              <label for="pName">Product Name</label>
+              <input type="text" id="pName" required placeholder="e.g. Whole Milk 1L">
+            </div>
+            <div class="field">
+              <label for="pBatch">Batch / SKU (optional)</label>
+              <input type="text" id="pBatch" placeholder="e.g. LOT-2291">
+            </div>
+            <div class="field">
+              <label for="pQty">Quantity</label>
+              <input type="number" id="pQty" min="0" value="1">
+            </div>
+            <div class="field">
+              <label for="pMfg">Manufacturing Date</label>
+              <input type="date" id="pMfg" required>
+            </div>
+            <div class="field">
+              <label for="pExp">Expiry Date</label>
+              <input type="date" id="pExp" required>
+            </div>
+          </div>
+          <button type="submit" class="add-btn">Add to Shelf</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head" onclick="togglePanel('remPanel')">
+        <h3>Reminder Settings</h3>
+        <span class="chev" id="remPanelChev">▾</span>
+      </div>
+      <div class="panel-body" id="remPanelBody">
+        <p style="color:var(--slate); font-size:12.5px; margin-bottom:16px; line-height:1.5;">
+          Choose how many days before expiry a product should be flagged "Clear Soon."
+          Notifications appear as banners above whenever you open Shelf Life — clear what's flagged before it turns to waste.
+        </p>
+        <div class="reminder-settings">
+          <div class="field-sm">
+            <label for="warnDays">Warn me (days before expiry)</label>
+            <input type="number" id="warnDays" min="1" value="7">
+          </div>
+          <button class="save-pref-btn" onclick="saveReminderPref()">Save Setting</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">All</button>
+      <button class="filter-btn" data-filter="expired" onclick="setFilter('expired')">Expired</button>
+      <button class="filter-btn" data-filter="soon" onclick="setFilter('soon')">Clear Soon</button>
+      <button class="filter-btn" data-filter="fresh" onclick="setFilter('fresh')">Fresh</button>
+      <input type="text" class="search-box" id="searchBox" placeholder="Search products…" oninput="renderProducts()">
+    </div>
+
+    <div class="grid" id="productGrid"></div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   STORAGE HELPERS  (localStorage-based — per-browser persistence)
+   ============================================================ */
+const USERS_KEY = 'sl_users';
+const SESSION_KEY = 'sl_session';
+
+function getUsers(){
+  return JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
+}
+function saveUsers(users){
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+function getSession(){
+  return localStorage.getItem(SESSION_KEY);
+}
+function setSession(username){
+  localStorage.setItem(SESSION_KEY, username);
+}
+function clearSession(){
+  localStorage.removeItem(SESSION_KEY);
+}
+function productsKey(username){
+  return 'sl_products_' + username;
+}
+function prefKey(username){
+  return 'sl_pref_' + username;
+}
+function getProducts(username){
+  return JSON.parse(localStorage.getItem(productsKey(username)) || '[]');
+}
+function saveProducts(username, products){
+  localStorage.setItem(productsKey(username), JSON.stringify(products));
+}
+function getPref(username){
+  return JSON.parse(localStorage.getItem(prefKey(username)) || '{"warnDays":7}');
+}
+function savePref(username, pref){
+  localStorage.setItem(prefKey(username), JSON.stringify(pref));
+}
+
+/* Simple hash so we never store plaintext passwords in localStorage */
+function simpleHash(str){
+  let hash = 0;
+  for(let i=0;i<str.length;i++){
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return 'h' + hash.toString(36) + str.length;
+}
+
+/* ============================================================
+   AUTH
+   ============================================================ */
+let currentUser = null;
+let currentFilter = 'all';
+
+function switchTab(tab){
+  document.getElementById('tabLogin').classList.toggle('active', tab==='login');
+  document.getElementById('tabRegister').classList.toggle('active', tab==='register');
+  document.getElementById('loginForm').classList.toggle('hidden', tab!=='login');
+  document.getElementById('registerForm').classList.toggle('hidden', tab!=='register');
+  hideAuthError();
+}
+
+function showAuthError(msg){
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function hideAuthError(){
+  document.getElementById('authError').classList.remove('show');
+}
+
+function handleRegister(e){
+  e.preventDefault();
+  hideAuthError();
+  const username = document.getElementById('regUser').value.trim();
+  const pass = document.getElementById('regPass').value;
+  const pass2 = document.getElementById('regPass2').value;
+
+  if(pass !== pass2){
+    showAuthError('Passwords do not match.');
+    return false;
+  }
+  const users = getUsers();
+  if(users[username]){
+    showAuthError('That username is already taken. Try signing in instead.');
+    return false;
+  }
+  users[username] = { passwordHash: simpleHash(pass) };
+  saveUsers(users);
+  savePref(username, {warnDays:7});
+  setSession(username);
+  enterApp(username);
+  showToast('Account created. Welcome, ' + username + '.');
+  return false;
+}
+
+function handleLogin(e){
+  e.preventDefault();
+  hideAuthError();
+  const username = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  const users = getUsers();
+
+  if(!users[username] || users[username].passwordHash !== simpleHash(pass)){
+    showAuthError('Incorrect username or password.');
+    return false;
+  }
+  setSession(username);
+  enterApp(username);
+  return false;
+}
+
+function handleLogout(){
+  clearSession();
+  currentUser = null;
+  document.getElementById('appShell').classList.remove('show');
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('loginForm').reset();
+  document.getElementById('registerForm').reset();
+  switchTab('login');
+}
+
+function enterApp(username){
+  currentUser = username;
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('appShell').classList.add('show');
+  document.getElementById('currentUserLabel').textContent = username;
+  document.getElementById('warnDays').value = getPref(username).warnDays;
+  renderProducts();
+}
+
+/* ============================================================
+   DATE / STATUS LOGIC
+   ============================================================ */
+function daysUntil(dateStr){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr + 'T00:00:00');
+  return Math.round((target - today) / (1000*60*60*24));
+}
+
+function getStatus(expiryDate, warnDays){
+  const d = daysUntil(expiryDate);
+  if(d < 0) return 'expired';
+  if(d <= warnDays) return 'soon';
+  return 'fresh';
+}
+
+function formatDate(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function countdownLabel(expiryDate){
+  const d = daysUntil(expiryDate);
+  if(d < 0) return `Expired ${Math.abs(d)} day${Math.abs(d)===1?'':'s'} ago`;
+  if(d === 0) return 'Expires today';
+  return `${d} day${d===1?'':'s'} left`;
+}
+
+/* ============================================================
+   PRODUCTS
+   ============================================================ */
+function handleAddProduct(e){
+  e.preventDefault();
+  const name = document.getElementById('pName').value.trim();
+  const batch = document.getElementById('pBatch').value.trim();
+  const qty = parseInt(document.getElementById('pQty').value) || 1;
+  const mfg = document.getElementById('pMfg').value;
+  const exp = document.getElementById('pExp').value;
+
+  if(new Date(exp) < new Date(mfg)){
+    showToast('Expiry date can\'t be before manufacturing date.', true);
+    return false;
+  }
+
+  const products = getProducts(currentUser);
+  products.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    name, batch, qty, mfg, exp
+  });
+  saveProducts(currentUser, products);
+  document.getElementById('productForm').reset();
+  document.getElementById('pQty').value = 1;
+  showToast('Added "' + name + '" to the shelf.');
+  renderProducts();
+  return false;
+}
+
+function deleteProduct(id){
+  let products = getProducts(currentUser);
+  const target = products.find(p=>p.id===id);
+  products = products.filter(p=>p.id!==id);
+  saveProducts(currentUser, products);
+  renderProducts();
+  if(target) showToast('Removed "' + target.name + '".');
+}
+
+function setFilter(f){
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.filter === f);
+  });
+  renderProducts();
+}
+
+function togglePanel(which){
+  const map = {
+    addPanel: ['addPanelBody','addPanelChev'],
+    remPanel: ['remPanelBody','remPanelChev']
+  };
+  const [bodyId, chevId] = map[which];
+  document.getElementById(bodyId).classList.toggle('open');
+  document.getElementById(chevId).classList.toggle('open');
+}
+
+function saveReminderPref(){
+  const days = parseInt(document.getElementById('warnDays').value) || 7;
+  savePref(currentUser, { warnDays: days });
+  showToast('Reminder set to ' + days + ' day' + (days===1?'':'s') + ' before expiry.');
+  renderProducts();
+}
+
+function showToast(msg, isError){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = isError ? 'var(--red)' : 'var(--green)';
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=> t.classList.remove('show'), 2600);
+}
+
+function renderProducts(){
+  const products = getProducts(currentUser);
+  const pref = getPref(currentUser);
+  const warnDays = pref.warnDays || 7;
+  const searchTerm = document.getElementById('searchBox').value.trim().toLowerCase();
+
+  // enrich with status
+  const enriched = products.map(p => ({...p, status: getStatus(p.exp, warnDays), daysLeft: daysUntil(p.exp)}));
+
+  // stats
+  const total = enriched.length;
+  const freshCount = enriched.filter(p=>p.status==='fresh').length;
+  const soonCount = enriched.filter(p=>p.status==='soon').length;
+  const expiredCount = enriched.filter(p=>p.status==='expired').length;
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statFresh').textContent = freshCount;
+  document.getElementById('statSoon').textContent = soonCount;
+  document.getElementById('statExpired').textContent = expiredCount;
+
+  // banners (notifications)
+  const expiredBanner = document.getElementById('expiredBanner');
+  const soonBanner = document.getElementById('soonBanner');
+  if(expiredCount > 0){
+    expiredBanner.classList.remove('hidden-banner');
+    document.getElementById('expiredBannerText').textContent =
+      `${expiredCount} item${expiredCount===1?'':'s'} already expired. Pull from shelf immediately.`;
+  } else {
+    expiredBanner.classList.add('hidden-banner');
+  }
+  if(soonCount > 0){
+    soonBanner.classList.remove('hidden-banner');
+    document.getElementById('soonBannerText').textContent =
+      `${soonCount} item${soonCount===1?'':'s'} expiring within ${warnDays} day${warnDays===1?'':'s'} — mark down and sell now.`;
+  } else {
+    soonBanner.classList.add('hidden-banner');
+  }
+
+  // filter + search
+  let filtered = enriched;
+  if(currentFilter !== 'all'){
+    filtered = filtered.filter(p => p.status === currentFilter);
+  }
+  if(searchTerm){
+    filtered = filtered.filter(p =>
+      p.name.toLowerCase().includes(searchTerm) ||
+      (p.batch||'').toLowerCase().includes(searchTerm)
+    );
+  }
+
+  // sort: expired first, then soonest expiry
+  filtered.sort((a,b)=> a.daysLeft - b.daysLeft);
+
+  const grid = document.getElementById('productGrid');
+  grid.innerHTML = '';
+
+  if(filtered.length === 0){
+    grid.innerHTML = `<div class="empty-state">
+      <div class="icon">📦</div>
+      <p>${total===0 ? 'No products on the shelf yet. Add your first one above.' : 'Nothing matches this filter.'}</p>
+    </div>`;
+    return;
+  }
+
+  const stampLabel = { fresh:'FRESH', soon:'CLEAR SOON', expired:'EXPIRED' };
+
+  filtered.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'card ' + p.status;
+    card.innerHTML = `
+      <div class="card-top">
+        <div>
+          <div class="card-name">${escapeHtml(p.name)}</div>
+          ${p.batch ? `<div class="card-batch">Batch: ${escapeHtml(p.batch)} · Qty: ${p.qty}</div>` : `<div class="card-batch">Qty: ${p.qty}</div>`}
+        </div>
+        <button class="del-btn" title="Remove" onclick="deleteProduct('${p.id}')">✕</button>
+      </div>
+      <span class="stamp ${p.status}">${stampLabel[p.status]}</span>
+      <div class="date-rows">
+        <div class="row"><span>Manufactured</span><span>${formatDate(p.mfg)}</span></div>
+        <div class="row"><span>Expires</span><span>${formatDate(p.exp)}</span></div>
+      </div>
+      <div class="countdown ${p.status}">${countdownLabel(p.exp)}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+/* ============================================================
+   INIT — resume session if one exists
+   ============================================================ */
+(function init(){
+  const session = getSession();
+  if(session){
+    const users = getUsers();
+    if(users[session]){
+      enterApp(session);
+      return;
+    }
+  }
+  document.getElementById('authScreen').classList.remove('hidden');
+})();
+</script>
+</body>
+</html>
